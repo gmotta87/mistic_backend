@@ -423,6 +423,5 @@ app.get('/debug/google-play', async (req, res) => {
 
 require('./swagger')(app);
 
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+
+module.exports = app;
