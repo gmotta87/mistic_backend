@@ -1,0 +1,4 @@
+Starting server...
+[dotenv@17.2.2] injecting env (1) from .env -- tip: 📡 auto-backup env with Radar: https://dotenvx.com/radar
+Server is running on port 3000
+Pinged your deployment. You successfully connected to MongoDB!
