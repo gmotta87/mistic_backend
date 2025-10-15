@@ -1,6 +1,6 @@
 const { google } = require('googleapis');
 const auth = new google.auth.GoogleAuth({
-  keyFile: './service-account.json', // Path to your service account key file
+  keyFile: './mistic-service.json', // Path to your service account key file
   scopes: ['https://www.googleapis.com/auth/androidpublisher'],
 });
 
@@ -25,6 +25,23 @@ async function listSubscriptionPlans(packageName) {
   }
 }
 
+async function listProducts(packageName) {
+  try {
+    console.log("--- INSIDE listProducts ---");
+    console.log("Package Name:", packageName);
+    const res = await androidpublisher.inappproducts.list({
+      packageName: packageName,
+    });
+    console.log("Products:", res.data.inappproduct);
+    return res.data.inappproduct;
+  } catch (error) {
+    console.error("Error fetching products:", error);
+    return [];
+  }
+}
+
 module.exports = {
+  listProducts,
   listSubscriptionPlans,
+  androidpublisher,
 };

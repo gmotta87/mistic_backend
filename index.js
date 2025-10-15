@@ -1,7 +1,6 @@
 console.log("Starting server...");
 require('dotenv').config();
 const express = require('express');
-const { auth } = require('google-auth-library');
 const { MongoClient, ServerApiVersion } = require('mongodb');
 const { google } = require('googleapis');
 
@@ -13,7 +12,7 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 // MongoDB connection
-const mongoUri = process.env.MONGODB_URI;
+const mongoUri = 'mongodb+srv://gmotta:bR6XKVGLy0HDnh8h@cluster0.ba350.mongodb.net';
 const client = new MongoClient(mongoUri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -34,187 +33,9 @@ async function connectDB() {
 
 connectDB();
 
-const playAuth = new google.auth.GoogleAuth({
-  keyFile: './service-account.json', // Path to your service account key file
-  scopes: ['https://www.googleapis.com/auth/androidpublisher'],
-});
-
-const androidpublisher = google.androidpublisher({
-  version: 'v3',
-  auth: playAuth,
-});
+const { listProducts, listSubscriptionPlans, androidpublisher } = require('./google-play-api');
 
 
-async function listProducts(packageName) {
-  try {
-    console.log("--- INSIDE listProducts ---");
-    console.log("Package Name:", packageName);
-    const res = await androidpublisher.inappproducts.list({
-      packageName: packageName,
-    });
-    console.log("Products:", res.data.inappproduct);
-    return res.data.inappproduct;
-  } catch (error) {
-    console.error("Error fetching products:", error);
-    return [];
-  }
-}
-
-async function listSubscriptionPlans(packageName) {
-  try {
-    console.log("--- INSIDE listSubscriptionPlans ---");
-    console.log("Package Name:", packageName);
-
-    // Fetching subscription products with full details
-    console.log("Fetching subscription products with details...");
-    const subsRes = await androidpublisher.monetization.subscriptions.list({
-      packageName: packageName,
-    });
-    
-    // Fetch details for each subscription to get localized data
-    const subscriptionsWithDetails = await Promise.all(
-      (subsRes.data.subscriptions || []).map(async (sub) => {
-        try {
-          const detailRes = await androidpublisher.monetization.subscriptions.get({
-            packageName: packageName,
-            productId: sub.productId,
-          });
-          return detailRes.data;
-        } catch (err) {
-          console.error(`Error fetching details for ${sub.productId}:`, err.message);
-          return sub; // Return basic info if detail fetch fails
-        }
-      })
-    );
-    
-    console.log(`Found ${subscriptionsWithDetails.length} subscriptions with details.`);
-
-    // Fetching in-app products with details
-    console.log("Fetching in-app products with details...");
-    // const inappRes = await androidpublisher.inappproducts.list({
-    //   packageName: packageName,
-    // });
-    
-    // Process in-app products to get full details
-    // const inappProducts = (inappRes.data.inappproduct || []).map(prod => {
-    //   // Extract localized listings
-    //   const listings = prod.listings || {};
-    //   const defaultLanguage = prod.defaultLanguage || 'pt-BR';
-      
-    //   return {
-    //     ...prod,
-    //     localizedListings: Object.entries(listings).reduce((acc, [lang, listing]) => {
-    //       acc[lang] = {
-    //         title: listing.title,
-    //         description: listing.description,
-    //       };
-    //       return acc;
-    //     }, {})
-    //   };
-    // });
-    
-    // console.log(`Found ${inappProducts.length} in-app products with details.`);
-
-    // Helper function to format price
-    const formatPrice = (price) => {
-      if (!price) return 'N/A';
-      if (price.units !== undefined && price.nanos !== undefined) {
-        return `${price.units}.${price.nanos.toString().padStart(9, '0')}`.replace(/\.?0+$/, '');
-      }
-      if (price.priceMicros) {
-        return (price.priceMicros / 1000000).toString();
-      }
-      return 'N/A';
-    };
-
-    // Process subscription details
-    const unifiedSubscriptions = subscriptionsWithDetails.flatMap(sub => {
-      return sub.basePlans?.map(basePlan => {
-        const price = basePlan.regionalPriceOffers?.[0]?.price || basePlan.otherRegionsConfig?.usdPrice;
-        const formattedPrice = formatPrice(price);
-        
-        // Extract localized titles and descriptions from listings
-        const localizedListings = sub.listings || {};
-        const names = {};
-        const descriptions = {};
-        
-        Object.entries(localizedListings).forEach(([lang, listing]) => {
-          // Convert to simple language code (e.g., 'pt-BR' -> 'pt')
-          const simpleLang = lang.split('-')[0];
-          names[simpleLang] = listing.title;
-          descriptions[simpleLang] = listing.description;
-        });
-        
-        return {
-          id: sub.productId,
-          type: 'subscription',
-          price: formattedPrice,
-          currencyCode: price?.currencyCode || 'USD',
-          billingPeriod: basePlan.autoRenewingBasePlanType?.billingPeriodDuration || 'N/A',
-          names,
-          descriptions,
-          metadata: {
-            basePlanId: basePlan.basePlanId,
-            status: sub.status,
-            taxAndComplianceSettings: sub.taxAndComplianceSettings
-          }
-        };
-      }) || [];
-    });
-
-    // Process in-app product details
-    // const unifiedInAppProducts = inappProducts.map(prod => {
-    //   const price = prod.defaultPrice || {};
-    //   const formattedPrice = formatPrice(price);
-      
-      // Extract localized titles and descriptions
-      const names = {};
-      const descriptions = {};
-      
-      // Object.entries(prod.localizedListings || {}).forEach(([lang, listing]) => {
-      //   // Convert to simple language code (e.g., 'pt-BR' -> 'pt')
-      //   const simpleLang = lang.split('-')[0];
-      //   names[simpleLang] = listing.title;
-      //   descriptions[simpleLang] = listing.description;
-      // });
-      
-      // return {
-      //   id: prod.sku,
-      //   type: 'inapp',
-      //   price: formattedPrice,
-      //   currencyCode: price.currency || 'USD',
-      //   billingPeriod: 'one_time',
-      //   names,
-      //   descriptions,
-      //   metadata: {
-      //     status: prod.status,
-      //     purchaseType: prod.purchaseType,
-      //     defaultLanguage: prod.defaultLanguage
-      //   }
-      // };
-    // });
-    
-    const allProducts = [...unifiedSubscriptions];
-
-    console.log("Final unified products:", JSON.stringify(allProducts, null, 2));
-    return allProducts;
-
-  } catch (err) {
-    console.error('--- ERROR in listSubscriptionPlans ---');
-    console.error('Error message:', err.message);
-    if (err.response) {
-      console.error('Error response data:', JSON.stringify(err.response.data, null, 2));
-    }
-    
-    // Return a structured error to the client
-    return {
-      error: true,
-      message: err.message,
-      details: err.response?.data?.error || 'No additional details',
-      timestamp: new Date().toISOString()
-    };
-  }
-}
 
 
 /**
@@ -253,22 +74,11 @@ app.post('/verify-purchase', async (req, res) => {
   }
 
   try {
-    const authClient = auth.fromJSON({
-        type: process.env.GOOGLE_SERVICE_ACCOUNT_TYPE,
-        project_id: process.env.GOOGLE_PROJECT_ID,
-        private_key_id: process.env.GOOGLE_PRIVATE_KEY_ID,
-        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-        client_email: process.env.GOOGLE_CLIENT_EMAIL,
-        client_id: process.env.GOOGLE_CLIENT_ID,
-        auth_uri: process.env.GOOGLE_AUTH_URI,
-        token_uri: process.env.GOOGLE_TOKEN_URI,
-        auth_provider_x509_cert_url: process.env.GOOGLE_AUTH_PROVIDER_CERT_URL,
-        client_x509_cert_url: process.env.GOOGLE_CLIENT_X509_CERT_URL,
+    const apiResponse = await androidpublisher.purchases.products.get({
+      packageName,
+      productId,
+      token,
     });
-
-    const url = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/purchases/products/${productId}/tokens/${token}`;
-
-    const apiResponse = await authClient.request({ url });
 
     if (apiResponse.status === 200) {
       console.log('Purchase verified successfully:', apiResponse.data);
@@ -380,7 +190,7 @@ app.get('/debug/google-play', async (req, res) => {
     console.log('--- DEBUG: Testing Google Play Console API connection ---');
     
     // Test authentication
-    const authClient = await playAuth.getClient();
+    const authClient = await androidpublisher.auth.getClient();
     console.log('Authentication successful');
     
     // Test basic API access
